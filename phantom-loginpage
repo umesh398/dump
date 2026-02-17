@@ -1,87 +1,3196 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Phantom Login</title>
+ import { useState, useRef, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  Linking,
+  SafeAreaView,
+  StatusBar,
+  Modal,
+  Platform,
+  Animated,
+  TouchableWithoutFeedback,
+  KeyboardAvoidingView,
+  Dimensions,
+} from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { Picker } from "@react-native-picker/picker";
+import { LinearGradient } from "expo-linear-gradient";
+import DateTimePicker from '@react-native-community/datetimepicker'; // <-- NEW
 
-<style>
-    *{
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-        font-family: Arial, sans-serif;
+const { width } = Dimensions.get("window");
+
+// ==================== CONSTANTS ====================
+const logo = require("./assets/logo.png");
+
+// FIX 5: Android network error – differentiate based on platform
+const API_URL = Platform.OS === "android" 
+  ? "http://192.168.1.47:8000" 
+  : "http://localhost:8000";
+
+const EVEN_IMAGE_OPTIONS = [2, 4, 6, 8];
+
+const CERTIFICATIONS = [
+  "IMO Inspector", "Class Surveyor", "Port State Control", "Flag State Inspector",
+  "ISM Auditor", "ISPS Auditor", "MLC Inspector", "Vetting Inspector",
+  "Condition Surveyor", "Bunker Surveyor",
+];
+
+const SHIP_TYPES = [
+  "Tanker (Oil/Chemical/Gas)", "Bulk Carrier", "Container Ship", "General Cargo",
+  "Ro-Ro", "Passenger Ship", "Offshore Vessel", "Tug/Barge",
+  "Fishing Vessel", "Navy/Military",
+];
+
+const SPECIALIZATIONS = [
+  "Pre-Purchase",
+  "ISM/SMS",
+  "MLC",
+  "SIRE 2.0",
+  "Dry Dock",
+];
+
+// ==================== COLOR PALETTE (Enhanced Luxury) ====================
+const COLORS = {
+  primary: "#0A2A44",       // deeper navy
+  primaryLight: "#1E3A5F",
+  secondary: "#2C5F7A",     // slate blue
+  secondaryLight: "#3A6D8C",
+  accent: "#3A9B9E",        // richer teal
+  success: "#2A9D8F",
+  warning: "#F4A261",
+  error: "#E76F51",
+  white: "#FFFFFF",
+  gray50: "#F9FAFB",
+  gray100: "#F2F5F9",
+  gray200: "#E5E9F0",
+  gray300: "#CFD6E4",
+  gray400: "#9AA6B8",
+  gray500: "#65748C",
+  gray600: "#4A5568",
+  gray700: "#364153",
+  gray800: "#1F2937",
+  gray900: "#0F172A",
+  overlay: "rgba(10, 42, 68, 0.6)",
+  shadow: "rgba(0, 0, 0, 0.1)",
+};
+
+// ==================== TYPOGRAPHY (Premium) ====================
+const FONTS = {
+  regular: Platform.select({ ios: "SFProText-Regular", android: "Roboto", default: "System" }),
+  medium: Platform.select({ ios: "SFProText-Medium", android: "Roboto-Medium", default: "System" }),
+  semibold: Platform.select({ ios: "SFProText-Semibold", android: "Roboto-Bold", default: "System" }),
+  bold: Platform.select({ ios: "SFProText-Bold", android: "Roboto-Bold", default: "System" }),
+  heavy: Platform.select({ ios: "SFProText-Heavy", android: "Roboto-Black", default: "System" }),
+};
+
+const TYPOGRAPHY = {
+  h1: { fontSize: 30, fontFamily: FONTS.bold, lineHeight: 38 },
+  h2: { fontSize: 24, fontFamily: FONTS.semibold, lineHeight: 32 },
+  h3: { fontSize: 20, fontFamily: FONTS.semibold, lineHeight: 28 },
+  body: { fontSize: 16, fontFamily: FONTS.regular, lineHeight: 24 },
+  caption: { fontSize: 14, fontFamily: FONTS.medium, lineHeight: 20 },
+  small: { fontSize: 12, fontFamily: FONTS.regular, lineHeight: 16 },
+  label: { fontSize: 11, fontFamily: FONTS.medium, letterSpacing: 0.8, textTransform: "uppercase" },
+};
+
+// ==================== TYPES ====================
+type Screen = "login" | "register" | "details" | "upload" | "preview" | "review";
+
+type Img = {
+  uri: string;
+  description: string;
+  name: string;
+  type: string;
+};
+
+type Profile = {
+  id: string;
+  profilePicture: string;
+  name: string;
+  phone: string;
+  email: string;
+  signature: string;
+  experience: string;
+  certifications: string[];
+  shipTypes: string[];
+  licenseNumber: string;
+  issuingAuthority: string;
+  expiryDate: string;
+  address: string;
+  emergencyContact: string;
+  notes: string;
+  employeeId: string;
+  baseLocation: string;
+  specializations: string[];
+  fileUpload: string;
+  documentUpload: string;
+  currentRating: string;
+  competencyHull: string;
+  competencyMachinery: string;
+  competencySafety: string;
+  competencyDocs: string;
+};
+
+type User = {
+  id: string;
+  fullName: string;
+  email: string;
+  company: string;
+  createdAt?: string;
+};
+
+type InspectionDetails = {
+  date: string;
+  shipName: string;
+  shipType: string;
+  port: string;
+  inspector: string;
+};
+
+// ==================== ANIMATED BUTTON COMPONENT ====================
+const AnimatedButton = ({ onPress, style, children, disabled, loading }: any) => {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const animateIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.96,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const animateOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  return (
+    <TouchableWithoutFeedback
+      onPressIn={animateIn}
+      onPressOut={animateOut}
+      onPress={onPress}
+      disabled={disabled}
+    >
+      <Animated.View style={[style, { transform: [{ scale }] }]}>
+        {loading ? <ActivityIndicator color={COLORS.white} /> : children}
+      </Animated.View>
+    </TouchableWithoutFeedback>
+  );
+};
+
+// ==================== MAIN APP ====================
+export default function App() {
+  // ---------- SCREEN & DATA STATE ----------
+  const [screen, setScreen] = useState<Screen>("login");
+  const [inspectionId, setInspectionId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // ---------- PROFILES ----------
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [newProfile, setNewProfile] = useState<Profile>({
+    id: "",
+    profilePicture: "",
+    name: "",
+    phone: "",
+    email: "",
+    signature: "",
+    experience: "",
+    certifications: [],
+    shipTypes: [],
+    licenseNumber: "",
+    issuingAuthority: "",
+    expiryDate: "",
+    address: "",
+    emergencyContact: "",
+    notes: "",
+    employeeId: "",
+    baseLocation: "",
+    specializations: [],
+    fileUpload: "",
+    documentUpload: "",
+    currentRating: "",
+    competencyHull: "",
+    competencyMachinery: "",
+    competencySafety: "",
+    competencyDocs: "",
+  });
+
+  // ---------- USER AUTH ----------
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  // ---------- REGISTRATION ----------
+  const [registerForm, setRegisterForm] = useState({
+    fullName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    company: "",
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [registrationErrors, setRegistrationErrors] = useState<{ [key: string]: string }>({});
+
+  // ---------- INSPECTION DETAILS ----------
+  const [details, setDetails] = useState<InspectionDetails>({
+    date: new Date().toISOString().split("T")[0],
+    shipName: "",
+    shipType: "",
+    port: "",
+    inspector: "",
+  });
+
+  // ---------- NEW DATE PICKER STATE ----------
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // ---------- IMAGES ----------
+  const [images, setImages] = useState<Img[]>([]);
+  const [shipImages, setShipImages] = useState<Img[]>([]);
+  const [companyLogoImage, setCompanyLogoImage] = useState<Img | null>(null);
+  const [imagesPerPage, setImagesPerPage] = useState<number>(2);
+
+  // ---------- ANIMATIONS ----------
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(300)).current;
+  const [focusedInput, setFocusedInput] = useState<string | null>(null);
+
+  // ==================== DATE PICKER HANDLER ====================
+  // FIX 1: Timezone‑safe onDateChange
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (!selectedDate) return;
+
+    const local = new Date(selectedDate.getTime() - selectedDate.getTimezoneOffset() * 60000);
+    const formatted = local.toISOString().split("T")[0];
+
+    setDetails(prev => ({ ...prev, date: formatted }));
+  };
+
+  // ==================== API CALLS ====================
+  const loadProfiles = async (userId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/profiles?user_id=${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setProfiles(data);
+      }
+    } catch (error) {
+      console.error("Failed to load profiles:", error);
+    }
+  };
+
+  const handleRegister = async () => {
+    if (!validateRegistration()) {
+      Alert.alert("Validation Error", "Please fix the errors.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          full_name: registerForm.fullName,
+          email: registerForm.email,
+          password: registerForm.password,
+          company: registerForm.company,
+        }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        Alert.alert("Success", `Welcome, ${data.full_name}!`, [
+          {
+            text: "Continue",
+            onPress: () => {
+              setScreen("login");
+              setRegisterForm({
+                fullName: "",
+                email: "",
+                password: "",
+                confirmPassword: "",
+                company: "",
+              });
+              setRegistrationErrors({});
+            },
+          },
+        ]);
+      } else {
+        Alert.alert("Registration Failed", data.detail || "Something went wrong");
+      }
+    } catch (error) {
+      Alert.alert("Network Error", "Could not connect to server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter email and password.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        const user: User = {
+          id: data.user.id,
+          fullName: data.user.full_name,
+          email: data.user.email,
+          company: data.user.company,
+          createdAt: data.user.created_at,
+        };
+        setCurrentUser(user);
+        setDetails((prev) => ({ ...prev, inspector: user.fullName }));
+        await loadProfiles(user.id);
+        setScreen("details");
+      } else {
+        Alert.alert("Login Failed", data.detail || "Invalid email or password");
+      }
+    } catch (error) {
+      Alert.alert("Network Error", "Could not connect to server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: () => {
+          setCurrentUser(null);
+          setEmail("");
+          setPassword("");
+          setProfiles([]);
+          setSelectedProfile(null);
+          setDetails({
+            date: new Date().toISOString().split("T")[0],
+            shipName: "",
+            shipType: "",
+            port: "",
+            inspector: "",
+          });
+          setImages([]);
+          setShipImages([]);
+          setCompanyLogoImage(null);
+          setScreen("login");
+        },
+      },
+    ]);
+  };
+
+  // FIX 4: Profile Update API – URL already correct
+  const saveProfile = async () => {
+    if (!newProfile.name) {
+      Alert.alert("Missing Information", "Please fill in name.");
+      return;
     }
 
-    body{
-        height: 100vh;
-        background-image: url("Screenshot 2026-01-25 150739.png");
-        background-size: cover;
-        background-position: center;
-        display: flex;
-        justify-content: center;
-        align-items: center;
+    setLoading(true);
+
+    try {
+      const url =
+        isEditing && editingProfileId
+          ? `${API_URL}/profiles/${editingProfileId}`
+          : `${API_URL}/profiles?user_id=${currentUser?.id}`;
+
+      const method = isEditing ? "PUT" : "POST";
+
+      const form = new FormData();
+
+      form.append("name", newProfile.name);
+      form.append("phone", newProfile.phone || "");
+      form.append("email", newProfile.email || "");
+      form.append("experience", newProfile.experience || "");
+      form.append("licenseNumber", newProfile.licenseNumber || "");
+      form.append("issuingAuthority", newProfile.issuingAuthority || "");
+      form.append("expiryDate", newProfile.expiryDate || "");
+      form.append("address", newProfile.address || "");
+      form.append("emergencyContact", newProfile.emergencyContact || "");
+      form.append("notes", newProfile.notes || "");
+      form.append("certifications", JSON.stringify(newProfile.certifications));
+      form.append("shipTypes", JSON.stringify(newProfile.shipTypes));
+      form.append("employeeId", newProfile.employeeId || "");
+      form.append("baseLocation", newProfile.baseLocation || "");
+      form.append("specializations", JSON.stringify(newProfile.specializations));
+      form.append("currentRating", newProfile.currentRating || "");
+      form.append("competencyHull", newProfile.competencyHull || "");
+      form.append("competencyMachinery", newProfile.competencyMachinery || "");
+      form.append("competencySafety", newProfile.competencySafety || "");
+      form.append("competencyDocs", newProfile.competencyDocs || "");
+
+      if (newProfile.profilePicture) {
+        form.append("profile_picture", {
+          uri: newProfile.profilePicture,
+          name: "profile.jpg",
+          type: "image/jpeg",
+        } as any);
+      }
+
+      if (newProfile.signature) {
+        form.append("signature", {
+          uri: newProfile.signature,
+          name: "signature.jpg",
+          type: "image/jpeg",
+        } as any);
+      }
+
+      if (newProfile.fileUpload) {
+        form.append("file_upload", {
+          uri: newProfile.fileUpload,
+          name: "file_upload.jpg",
+          type: "image/jpeg",
+        } as any);
+      }
+
+      if (newProfile.documentUpload) {
+        form.append("document_upload", {
+          uri: newProfile.documentUpload,
+          name: "document_upload.jpg",
+          type: "image/jpeg",
+        } as any);
+      }
+
+      const response = await fetch(url, {
+        method,
+        body: form,
+      });
+
+      const saved = await response.json();
+
+      if (response.ok) {
+        await loadProfiles(currentUser!.id);
+        Alert.alert("Success", `Profile ${isEditing ? "updated" : "saved"} successfully!`);
+        closeProfileModal();
+      } else {
+        Alert.alert("Error", saved.detail || "Failed to save profile");
+      }
+    } catch (e) {
+      Alert.alert("Network Error", "Could not connect to server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteProfile = async (profileId: string) => {
+    const profile = profiles.find((p) => p.id === profileId);
+    Alert.alert("Delete Profile", `Delete ${profile?.name}'s profile?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const response = await fetch(`${API_URL}/profiles/${profileId}`, {
+              method: "DELETE",
+            });
+            if (response.ok) {
+              setProfiles((prev) => prev.filter((p) => p.id !== profileId));
+              if (selectedProfile?.id === profileId) setSelectedProfile(null);
+              Alert.alert("Success", "Profile deleted.");
+            } else {
+              Alert.alert("Error", "Failed to delete profile");
+            }
+          } catch (error) {
+            Alert.alert("Network Error", "Could not connect to server");
+          }
+        },
+      },
+    ]);
+  };
+
+  // ==================== IMAGE PICKERS ====================
+  const pickCompanyLogo = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Required", "Please grant access to photos.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      quality: 0.9,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+    if (!result.canceled) {
+      setCompanyLogoImage({
+        uri: result.assets[0].uri,
+        description: "",
+        name: `company_logo_${Date.now()}.jpg`,
+        type: "image/jpeg",
+      });
+    }
+  };
+
+  const removeCompanyLogo = () => setCompanyLogoImage(null);
+
+  const pickShipImages = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsMultipleSelection: true,
+      quality: 0.9,
+    });
+    if (!result.canceled) {
+      const imgs = result.assets.map((a, i) => ({
+        uri: a.uri,
+        description: "",
+        name: a.fileName || `ship_${Date.now()}_${i}.jpg`,
+        type: "image/jpeg",
+      }));
+      setShipImages((prev) => [...prev, ...imgs]);
+    }
+  };
+
+  const takeShipPhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Required", "Camera access is needed.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.9,
+      allowsEditing: true,
+    });
+    if (!result.canceled) {
+      setShipImages((prev) => [
+        ...prev,
+        {
+          uri: result.assets[0].uri,
+          description: "",
+          name: `ship_photo_${Date.now()}.jpg`,
+          type: "image/jpeg",
+        },
+      ]);
+    }
+  };
+
+  const addShipImageOptions = () => {
+    Alert.alert("Add Ship Image", "Choose source", [
+      { text: "📸 Camera", onPress: takeShipPhoto },
+      { text: "🖼️ Gallery", onPress: pickShipImages },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const removeShipImage = (uri: string) => setShipImages((prev) => prev.filter((img) => img.uri !== uri));
+
+  const pickInspectionImages = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsMultipleSelection: true,
+      quality: 0.9,
+    });
+    if (!result.canceled) {
+      const imgs = result.assets.map((a, i) => ({
+        uri: a.uri,
+        description: "",
+        name: a.fileName || `inspection_${Date.now()}_${i}.jpg`,
+        type: "image/jpeg",
+      }));
+      setImages((prev) => [...prev, ...imgs]);
+    }
+  };
+
+  const takeInspectionPhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") return;
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.9,
+      allowsEditing: true,
+    });
+    if (!result.canceled) {
+      setImages((prev) => [
+        ...prev,
+        {
+          uri: result.assets[0].uri,
+          description: "",
+          name: `inspection_photo_${Date.now()}.jpg`,
+          type: "image/jpeg",
+        },
+      ]);
+    }
+  };
+
+  const removeInspectionImage = (uri: string) => setImages((prev) => prev.filter((img) => img.uri !== uri));
+
+  const updateInspectionImageDescription = (uri: string, description: string) => {
+    setImages((prev) =>
+      prev.map((img) => (img.uri === uri ? { ...img, description } : img))
+    );
+  };
+
+  const pickProfilePicture = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Required", "Please grant access to photos.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      quality: 0.9,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+    if (!result.canceled) {
+      setNewProfile((prev) => ({ ...prev, profilePicture: result.assets[0].uri }));
+    }
+  };
+
+  const pickSignature = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") return;
+    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.9 });
+    if (!result.canceled) {
+      setNewProfile((prev) => ({ ...prev, signature: result.assets[0].uri }));
+    }
+  };
+
+  const pickFileUpload = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") return;
+    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.9 });
+    if (!result.canceled) {
+      setNewProfile((prev) => ({ ...prev, fileUpload: result.assets[0].uri }));
+    }
+  };
+
+  const pickDocumentUpload = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") return;
+    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.9 });
+    if (!result.canceled) {
+      setNewProfile((prev) => ({ ...prev, documentUpload: result.assets[0].uri }));
+    }
+  };
+
+  // ==================== PDF WAITING FUNCTION ====================
+  const waitForPdf = async (id: string) => {
+    for (let i = 0; i < 25; i++) {
+      try {
+        const res = await fetch(`${API_URL}/export-status/${id}`);
+        const data = await res.json();
+        if (data.ready) return true;
+      } catch { }
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    return false;
+  };
+
+  // ==================== NAVIGATION ====================
+  const goBack = () => {
+    if (screen === "details") setScreen("login");
+    else if (screen === "upload") setScreen("details");
+    else if (screen === "preview") setScreen("upload");
+    else if (screen === "review") setScreen("preview");
+    else if (screen === "register") setScreen("login");
+  };
+
+  const navigateToDetails = () => setScreen("details");
+  const navigateToUpload = () => setScreen("upload");
+  const openProfileModal = () => {
+    setShowProfileModal(true);
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 15,
+        stiffness: 150,
+      }),
+    ]).start();
+  };
+
+  const closeProfileModal = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 300,
+        useNativeDriver: true,
+        damping: 20,
+        stiffness: 200,
+      }),
+    ]).start(() => {
+      setShowProfileModal(false);
+      setIsEditing(false);
+      setEditingProfileId(null);
+    });
+  };
+
+  // ==================== HELPER ====================
+  const isActive = (tab: Screen) => screen === tab;
+
+  // ==================== REGISTRATION VALIDATION ====================
+  const validateRegistration = () => {
+    const errors: { [key: string]: string } = {};
+    if (!registerForm.fullName.trim()) errors.fullName = "Full name is required";
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!registerForm.email.trim()) errors.email = "Email is required";
+    else if (!emailRegex.test(registerForm.email)) errors.email = "Invalid email format";
+    if (!registerForm.password) errors.password = "Password is required";
+    else if (registerForm.password.length < 6) errors.password = "Minimum 6 characters";
+    if (!registerForm.confirmPassword) errors.confirmPassword = "Please confirm password";
+    else if (registerForm.password !== registerForm.confirmPassword) errors.confirmPassword = "Passwords do not match";
+    if (!registerForm.company.trim()) errors.company = "Company name is required";
+    setRegistrationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // ==================== PROFILE FUNCTIONS ====================
+  const openEditProfileModal = (profile: Profile) => {
+    setIsEditing(true);
+    setEditingProfileId(profile.id);
+    setNewProfile(profile);
+    openProfileModal();
+  };
+
+  const toggleCertification = (cert: string) => {
+    setNewProfile((prev) => ({
+      ...prev,
+      certifications: prev.certifications.includes(cert)
+        ? prev.certifications.filter((c) => c !== cert)
+        : [...prev.certifications, cert],
+    }));
+  };
+
+  const toggleShipType = (type: string) => {
+    setNewProfile((prev) => ({
+      ...prev,
+      shipTypes: prev.shipTypes.includes(type)
+        ? prev.shipTypes.filter((t) => t !== type)
+        : [...prev.shipTypes, type],
+    }));
+  };
+
+  const toggleSpecialization = (spec: string) => {
+    setNewProfile((prev) => ({
+      ...prev,
+      specializations: prev.specializations.includes(spec)
+        ? prev.specializations.filter((s) => s !== spec)
+        : [...prev.specializations, spec],
+    }));
+  };
+
+  const selectProfile = (profile: Profile) => {
+    setSelectedProfile(profile);
+    if (screen === "details") {
+      setDetails((prev) => ({ ...prev, inspector: profile.name }));
+    }
+  };
+
+  // ==================== FIXED INSPECTION SUBMISSION ====================
+  const uploadInspection = async () => {
+    if (
+      !details.date ||
+      !details.shipName ||
+      !details.shipType ||
+      !details.port ||
+      !details.inspector ||
+      images.length === 0
+    ) {
+      Alert.alert("Missing Data", "Please fill all fields and add inspection images.");
+      return;
     }
 
-    .login-box{
-        width: 340px;
-        padding: 25px;
-        border-radius: 16px;
-        background: rgba(255, 255, 255, 0.15);
-        backdrop-filter: blur(10px);
-        box-shadow: 0 8px 32px rgba(0,0,0,0.25);
-        border: 1px solid rgba(255,255,255,0.3);
-        text-align: center;
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("email", currentUser?.email || email);
+      formData.append("date", details.date); // FIX 6: inspection date always sent
+      formData.append("ship_name", details.shipName);
+      formData.append("ship_type", details.shipType);
+      formData.append("port", details.port);
+      formData.append("inspector", details.inspector);
+      formData.append("images_per_page", imagesPerPage.toString());
+
+      if (companyLogoImage) {
+        formData.append("company_logo", {
+          uri: companyLogoImage.uri,
+          name: companyLogoImage.name || "company_logo.jpg",
+          type: "image/jpeg",
+        } as any);
+      }
+
+      shipImages.forEach((img, i) => {
+        formData.append(`ship_image_${i}`, {
+          uri: img.uri,
+          name: img.name || `ship_${i}.jpg`,
+          type: "image/jpeg",
+        } as any);
+        formData.append(`ship_image_description_${i}`, img.description || "");
+      });
+
+      if (selectedProfile) {
+        formData.append("profile_id", selectedProfile.id);
+        formData.append("inspector_phone", selectedProfile.phone);
+        formData.append("inspector_email", selectedProfile.email);
+        formData.append("inspector_experience", selectedProfile.experience);
+        formData.append("inspector_certifications", selectedProfile.certifications.join(", "));
+        formData.append("inspector_license", selectedProfile.licenseNumber);
+
+        if (selectedProfile.profilePicture) {
+          formData.append("inspector_photo", {
+            uri: selectedProfile.profilePicture,
+            name: "inspector.jpg",
+            type: "image/jpeg",
+          } as any);
+        }
+
+        if (selectedProfile.signature) {
+          formData.append("inspector_signature", {
+            uri: selectedProfile.signature,
+            name: "signature.jpg",
+            type: "image/jpeg",
+          } as any);
+        }
+      }
+
+      images.forEach((img, i) => {
+        formData.append(`inspection_image_${i}`, {
+          uri: img.uri,
+          name: img.name || `inspection_${i}.jpg`,
+          type: "image/jpeg",
+        } as any);
+        formData.append(`inspection_description_${i}`, img.description || "");
+      });
+
+      const response = await fetch(`${API_URL}/inspection`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setInspectionId(data.inspection_id);
+        setScreen("review");
+      } else {
+        Alert.alert("Upload Failed", data.message || "Unknown error");
+      }
+    } catch (error: any) {
+      Alert.alert("Network Error", "Could not connect to server. Please check your connection.");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    .login-box h3{
-        margin-bottom: 20px;
-        letter-spacing: 1px;
-        color: #7d80e2;
+  // ==================== SCREEN RENDERING (Enhanced) ====================
+  const renderScreen = () => {
+    switch (screen) {
+      case "login":
+        return (
+          <SafeAreaView style={styles.safeArea}>
+            <LinearGradient
+              colors={[COLORS.gray50, COLORS.white]}
+              style={StyleSheet.absoluteFill}
+            />
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+              <ScrollView contentContainerStyle={styles.centerScroll} keyboardShouldPersistTaps="handled">
+                <View style={styles.logoContainer}>
+                  <Image source={logo} style={styles.logoLarge} />
+                  <Text style={styles.brand}>⚓ FATHOM MARINE</Text>
+                  <Text style={styles.subtitle}>Ship Inspection System</Text>
+                </View>
+
+                {currentUser && (
+                  <View style={styles.welcomeCard}>
+                    <Text style={styles.welcomeText}>👋 Welcome back, {currentUser.fullName}!</Text>
+                  </View>
+                )}
+
+                <View style={[styles.inputGroup, focusedInput === 'email' && styles.inputFocused]}>
+                  <Text style={styles.inputIcon}>📧</Text>
+                  <TextInput
+                    style={styles.inputField}
+                    placeholder="Email"
+                    placeholderTextColor={COLORS.gray400}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    onFocus={() => setFocusedInput('email')}
+                    onBlur={() => setFocusedInput(null)}
+                  />
+                </View>
+
+                <View style={[styles.inputGroup, focusedInput === 'password' && styles.inputFocused]}>
+                  <Text style={styles.inputIcon}>🔒</Text>
+                  <TextInput
+                    style={styles.inputField}
+                    placeholder="Password"
+                    placeholderTextColor={COLORS.gray400}
+                    secureTextEntry
+                    value={password}
+                    onChangeText={setPassword}
+                    onFocus={() => setFocusedInput('password')}
+                    onBlur={() => setFocusedInput(null)}
+                  />
+                </View>
+
+                <AnimatedButton
+                  style={styles.primaryButton}
+                  onPress={handleLogin}
+                  disabled={loading}
+                  loading={loading}
+                >
+                  <Text style={styles.primaryButtonText}>🔐 LOGIN</Text>
+                </AnimatedButton>
+
+                <View style={styles.footerRow}>
+                  <Text style={styles.footerText}>Don't have an account? </Text>
+                  <TouchableOpacity onPress={() => setScreen("register")}>
+                    <Text style={styles.footerLink}>Sign Up →</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </KeyboardAvoidingView>
+          </SafeAreaView>
+        );
+
+      case "register":
+        return (
+          <SafeAreaView style={styles.safeArea}>
+            <LinearGradient
+              colors={[COLORS.gray50, COLORS.white]}
+              style={StyleSheet.absoluteFill}
+            />
+            <TouchableOpacity onPress={goBack} style={styles.backButton}>
+              <Text style={styles.backIcon}>←</Text>
+            </TouchableOpacity>
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+              <ScrollView contentContainerStyle={styles.centerScroll} keyboardShouldPersistTaps="handled">
+                <Image source={logo} style={styles.logoSmall} />
+                <Text style={styles.registerTitle}>⚓ Create Account</Text>
+                <Text style={styles.registerSubtitle}>Join Fathom Marine</Text>
+
+                <View style={styles.card}>
+                  <View style={[styles.inputGroup, registrationErrors.fullName && styles.inputError, focusedInput === 'fullName' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>👤</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Full Name *"
+                      placeholderTextColor={COLORS.gray400}
+                      value={registerForm.fullName}
+                      onChangeText={(text) => {
+                        setRegisterForm({ ...registerForm, fullName: text });
+                        if (registrationErrors.fullName) setRegistrationErrors({ ...registrationErrors, fullName: "" });
+                      }}
+                      onFocus={() => setFocusedInput('fullName')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  {registrationErrors.fullName && <Text style={styles.errorText}>{registrationErrors.fullName}</Text>}
+
+                  <View style={[styles.inputGroup, registrationErrors.email && styles.inputError, focusedInput === 'email' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>📧</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Email *"
+                      placeholderTextColor={COLORS.gray400}
+                      value={registerForm.email}
+                      onChangeText={(text) => {
+                        setRegisterForm({ ...registerForm, email: text.toLowerCase() });
+                        if (registrationErrors.email) setRegistrationErrors({ ...registrationErrors, email: "" });
+                      }}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      onFocus={() => setFocusedInput('email')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  {registrationErrors.email && <Text style={styles.errorText}>{registrationErrors.email}</Text>}
+
+                  <View style={[styles.passwordGroup, registrationErrors.password && styles.inputError, focusedInput === 'password' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>🔒</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Password *"
+                      placeholderTextColor={COLORS.gray400}
+                      value={registerForm.password}
+                      onChangeText={(text) => {
+                        setRegisterForm({ ...registerForm, password: text });
+                        if (registrationErrors.password) setRegistrationErrors({ ...registrationErrors, password: "" });
+                      }}
+                      secureTextEntry={!showPassword}
+                      onFocus={() => setFocusedInput('password')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.passwordToggle}>
+                      <Text style={styles.toggleIcon}>{showPassword ? "👁️" : "👁️‍🗨️"}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {registrationErrors.password && <Text style={styles.errorText}>{registrationErrors.password}</Text>}
+
+                  <View style={[styles.passwordGroup, registrationErrors.confirmPassword && styles.inputError, focusedInput === 'confirmPassword' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>✓</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Confirm Password *"
+                      placeholderTextColor={COLORS.gray400}
+                      value={registerForm.confirmPassword}
+                      onChangeText={(text) => {
+                        setRegisterForm({ ...registerForm, confirmPassword: text });
+                        if (registrationErrors.confirmPassword) setRegistrationErrors({ ...registrationErrors, confirmPassword: "" });
+                      }}
+                      secureTextEntry={!showConfirmPassword}
+                      onFocus={() => setFocusedInput('confirmPassword')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                    <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.passwordToggle}>
+                      <Text style={styles.toggleIcon}>{showConfirmPassword ? "👁️" : "👁️‍🗨️"}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {registrationErrors.confirmPassword && <Text style={styles.errorText}>{registrationErrors.confirmPassword}</Text>}
+
+                  <View style={[styles.inputGroup, registrationErrors.company && styles.inputError, focusedInput === 'company' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>🏢</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Company Name *"
+                      placeholderTextColor={COLORS.gray400}
+                      value={registerForm.company}
+                      onChangeText={(text) => {
+                        setRegisterForm({ ...registerForm, company: text });
+                        if (registrationErrors.company) setRegistrationErrors({ ...registrationErrors, company: "" });
+                      }}
+                      onFocus={() => setFocusedInput('company')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  {registrationErrors.company && <Text style={styles.errorText}>{registrationErrors.company}</Text>}
+
+                  <AnimatedButton
+                    style={styles.primaryButton}
+                    onPress={handleRegister}
+                    disabled={loading}
+                    loading={loading}
+                  >
+                    <Text style={styles.primaryButtonText}>✅ SIGN UP</Text>
+                  </AnimatedButton>
+
+                  <View style={styles.footerRow}>
+                    <Text style={styles.footerText}>Already have an account? </Text>
+                    <TouchableOpacity onPress={() => setScreen("login")}>
+                      <Text style={styles.footerLink}>Sign In →</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </ScrollView>
+            </KeyboardAvoidingView>
+          </SafeAreaView>
+        );
+
+      case "details":
+        return (
+          <SafeAreaView style={styles.safeArea}>
+            <View style={styles.detailsHeader}>
+              <View style={styles.headerLeft}>
+                <TouchableOpacity
+                  onPress={pickCompanyLogo}
+                  style={styles.logoBox}
+                  activeOpacity={0.7}
+                >
+                  {companyLogoImage ? (
+                    <View style={styles.logoWrapper}>
+                      <Image source={{ uri: companyLogoImage.uri }} style={styles.headerLogo} />
+                      <TouchableOpacity onPress={removeCompanyLogo} style={styles.logoRemove}>
+                        <Text style={styles.removeIconSmall}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.logoPlaceholder}>
+                      <Text style={styles.placeholderIcon}>📸</Text>
+                      <Text style={styles.placeholderText}>Add Logo</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <View style={styles.headerText}>
+                  <Text style={styles.companyName}>FATHOM MARINE</Text>
+                  <Text style={styles.poweredBy}>⚓ Marine Inspection</Text>
+                </View>
+              </View>
+
+              {/* FIX 2 & 3: DateTimePicker value and maximumDate */}
+              <TouchableOpacity
+                style={styles.dateBox}
+                onPress={() => setShowDatePicker(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.dateIcon}>📅</Text>
+                <Text style={styles.dateText}>{details.date}</Text>
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={details.date ? new Date(details.date) : new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  maximumDate={new Date()}
+                  onChange={onDateChange}
+                />
+              )}
+            </View>
+
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.formCard}>
+                <Text style={styles.cardTitle}>📋 Inspection Details</Text>
+                <View style={[styles.inputGroup, focusedInput === 'shipName' && styles.inputFocused]}>
+                  <Text style={styles.inputIcon}>🚢</Text>
+                  <TextInput
+                    style={styles.inputField}
+                    placeholder="Ship Name"
+                    placeholderTextColor={COLORS.gray400}
+                    value={details.shipName}
+                    onChangeText={(t) => setDetails({ ...details, shipName: t })}
+                    onFocus={() => setFocusedInput('shipName')}
+                    onBlur={() => setFocusedInput(null)}
+                  />
+                </View>
+                <View style={[styles.inputGroup, focusedInput === 'shipType' && styles.inputFocused]}>
+                  <Text style={styles.inputIcon}>⚙️</Text>
+                  <TextInput
+                    style={styles.inputField}
+                    placeholder="Ship Type"
+                    placeholderTextColor={COLORS.gray400}
+                    value={details.shipType}
+                    onChangeText={(t) => setDetails({ ...details, shipType: t })}
+                    onFocus={() => setFocusedInput('shipType')}
+                    onBlur={() => setFocusedInput(null)}
+                  />
+                </View>
+                <View style={[styles.inputGroup, focusedInput === 'port' && styles.inputFocused]}>
+                  <Text style={styles.inputIcon}>📍</Text>
+                  <TextInput
+                    style={styles.inputField}
+                    placeholder="Port"
+                    placeholderTextColor={COLORS.gray400}
+                    value={details.port}
+                    onChangeText={(t) => setDetails({ ...details, port: t })}
+                    onFocus={() => setFocusedInput('port')}
+                    onBlur={() => setFocusedInput(null)}
+                  />
+                </View>
+                <View style={styles.inspectorRow}>
+                  <View style={[styles.inputGroup, { flex: 1, marginBottom: 0 }, focusedInput === 'inspector' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>👨‍✈️</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Inspector Name"
+                      placeholderTextColor={COLORS.gray400}
+                      value={details.inspector}
+                      onChangeText={(t) => setDetails({ ...details, inspector: t })}
+                      onFocus={() => setFocusedInput('inspector')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  {profiles.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.selectButton}
+                      onPress={() => {
+                        Alert.alert(
+                          "Select Profile",
+                          "Choose an inspector:",
+                          [
+                            ...profiles.map((p) => ({
+                              text: `${p.name}`,
+                              onPress: () => selectProfile(p),
+                            })),
+                            { text: "Cancel", style: "cancel" },
+                          ]
+                        );
+                      }}
+                    >
+                      <Text style={styles.selectButtonText}>Select</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {selectedProfile && (
+                  <View style={styles.profileBadge}>
+                    <Text style={styles.badgeText}>👤 {selectedProfile.name}</Text>
+                    <TouchableOpacity onPress={() => setSelectedProfile(null)}>
+                      <Text style={styles.badgeRemove}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.imageCard}>
+                <Text style={styles.cardTitle}>🚢 Ship Images</Text>
+                <TouchableOpacity style={styles.addButton} onPress={addShipImageOptions}>
+                  <Text style={styles.addIcon}>📸+</Text>
+                  <Text style={styles.addText}>Add Ship Images</Text>
+                </TouchableOpacity>
+                {shipImages.length > 0 && (
+                  <View style={styles.imageGrid}>
+                    {shipImages.map((img) => (
+                      <View key={img.uri} style={styles.imageItem}>
+                        <Image source={{ uri: img.uri }} style={styles.thumbImage} />
+                        <TouchableOpacity onPress={() => removeShipImage(img.uri)} style={styles.removeButton}>
+                          <Text style={styles.removeIcon}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              <AnimatedButton
+                style={styles.nextButton}
+                onPress={() => {
+                  if (!details.shipName || !details.port) {
+                    Alert.alert("Missing Info", "Please enter Ship Name and Port.");
+                    return;
+                  }
+                  setScreen("upload");
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.nextButtonText}>⏩ NEXT → UPLOAD IMAGES</Text>
+              </AnimatedButton>
+
+              <View style={styles.bottomSpacer} />
+            </ScrollView>
+
+            {/* Floating Bottom Navigation */}
+            <View style={styles.floatingNav}>
+              <TouchableOpacity
+                style={[styles.navItem, isActive("details") && styles.navActive]}
+                onPress={navigateToDetails}
+              >
+                <Text style={[styles.navIcon, isActive("details") && styles.navIconActive]}>📋</Text>
+                <Text style={[styles.navLabel, isActive("details") && styles.navLabelActive]}>Inspection</Text>
+              </TouchableOpacity>
+              <View style={styles.navDivider} />
+              <TouchableOpacity
+                style={[styles.navItem, isActive("upload") && styles.navActive]}
+                onPress={navigateToUpload}
+              >
+                <Text style={[styles.navIcon, isActive("upload") && styles.navIconActive]}>📤</Text>
+                <Text style={[styles.navLabel, isActive("upload") && styles.navLabelActive]}>Upload</Text>
+              </TouchableOpacity>
+              <View style={styles.navDivider} />
+              <TouchableOpacity
+                style={[styles.navItem]}
+                onPress={openProfileModal}
+              >
+                <Text style={[styles.navIcon]}>👤</Text>
+                <Text style={[styles.navLabel]}>Profile</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        );
+
+      case "upload":
+        const imagesPerColumn = imagesPerPage / 2;
+        const pages: Img[][] = [];
+        for (let i = 0; i < images.length; i += imagesPerPage) {
+          pages.push(images.slice(i, i + imagesPerPage));
+        }
+
+        return (
+          <SafeAreaView style={styles.safeArea}>
+            <LinearGradient
+              colors={[COLORS.gray50, COLORS.white]}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.uploadHeader}>
+              <TouchableOpacity onPress={goBack} style={styles.backCircle}>
+                <Text style={styles.backIcon}>←</Text>
+              </TouchableOpacity>
+              <Text style={styles.uploadTitle}>📤 Upload Images</Text>
+              <View style={{ width: 40 }} />
+            </View>
+
+            <ScrollView contentContainerStyle={styles.uploadContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>🖼️ Images per page</Text>
+                <View style={styles.pickerWrap}>
+                  <Picker
+                    selectedValue={imagesPerPage}
+                    onValueChange={setImagesPerPage}
+                    style={styles.picker}
+                    dropdownIconColor={COLORS.gray600}
+                  >
+                    {EVEN_IMAGE_OPTIONS.map((num) => (
+                      <Picker.Item key={num} label={`${num} images`} value={num} />
+                    ))}
+                  </Picker>
+                </View>
+
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity style={styles.cameraBtn} onPress={takeInspectionPhoto}>
+                    <Text style={styles.cameraIcon}>📸</Text>
+                    <Text style={styles.cameraLabel}>Camera</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.galleryBtn} onPress={pickInspectionImages}>
+                    <Text style={styles.galleryIcon}>🖼️</Text>
+                    <Text style={styles.galleryLabel}>Gallery</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {pages.map((page, pIdx) => (
+                <View key={pIdx} style={styles.pageRow}>
+                  {[0, 1].map((col) => (
+                    <View key={col} style={styles.pageCol}>
+                      {page.slice(col * imagesPerColumn, (col + 1) * imagesPerColumn).map((img) => (
+                        <View key={img.uri} style={styles.imageCardUpload}>
+                          <Image source={{ uri: img.uri }} style={styles.uploadThumb} />
+                          <TouchableOpacity onPress={() => removeInspectionImage(img.uri)} style={styles.uploadRemove}>
+                            <Text style={styles.uploadRemoveIcon}>✕</Text>
+                          </TouchableOpacity>
+                          <TextInput
+                            style={styles.uploadDesc}
+                            placeholder="Add description..."
+                            placeholderTextColor={COLORS.gray400}
+                            value={img.description}
+                            onChangeText={(text) => updateInspectionImageDescription(img.uri, text)}
+                            multiline
+                          />
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              ))}
+
+              <AnimatedButton
+                style={styles.primaryButton}
+                onPress={() => setScreen("preview")}
+                disabled={loading}
+                loading={loading}
+              >
+                <Text style={styles.primaryButtonText}>⏩ PREVIEW & SUBMIT</Text>
+              </AnimatedButton>
+            </ScrollView>
+
+            {/* Floating Bottom Navigation */}
+            <View style={styles.floatingNav}>
+              <TouchableOpacity
+                style={[styles.navItem, isActive("details") && styles.navActive]}
+                onPress={navigateToDetails}
+              >
+                <Text style={[styles.navIcon, isActive("details") && styles.navIconActive]}>📋</Text>
+                <Text style={[styles.navLabel, isActive("details") && styles.navLabelActive]}>Inspection</Text>
+              </TouchableOpacity>
+              <View style={styles.navDivider} />
+              <TouchableOpacity
+                style={[styles.navItem, isActive("upload") && styles.navActive]}
+                onPress={navigateToUpload}
+              >
+                <Text style={[styles.navIcon, isActive("upload") && styles.navIconActive]}>📤</Text>
+                <Text style={[styles.navLabel, isActive("upload") && styles.navLabelActive]}>Upload</Text>
+              </TouchableOpacity>
+              <View style={styles.navDivider} />
+              <TouchableOpacity
+                style={[styles.navItem]}
+                onPress={openProfileModal}
+              >
+                <Text style={[styles.navIcon]}>👤</Text>
+                <Text style={[styles.navLabel]}>Profile</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        );
+
+      case "preview":
+        return (
+          <SafeAreaView style={styles.safeAreaCenter}>
+            <LinearGradient
+              colors={[COLORS.gray50, COLORS.white]}
+              style={StyleSheet.absoluteFill}
+            />
+            <TouchableOpacity onPress={goBack} style={styles.backButton}>
+              <Text style={styles.backIcon}>←</Text>
+            </TouchableOpacity>
+            <Text style={styles.previewTitle}>📋 Submit Inspection?</Text>
+            <View style={styles.previewCard}>
+              <Text style={styles.previewShip}>🚢 Ship: {details.shipName}</Text>
+              <Text style={styles.previewPort}>📍 Port: {details.port}</Text>
+              <Text style={styles.previewInspector}>
+                👨‍✈️ Inspector: <Text style={styles.previewHighlight}>{details.inspector || currentUser?.fullName}</Text>
+              </Text>
+              {selectedProfile && (
+                <Text style={styles.previewProfile}>
+                  👤 Profile: {selectedProfile.name}
+                </Text>
+              )}
+              <View style={styles.previewStats}>
+                <Text style={styles.previewStat}>📸 {images.length} inspection</Text>
+                <Text style={styles.previewStat}>🚢 {shipImages.length} ship</Text>
+                {companyLogoImage && <Text style={styles.previewStat}>✅ logo</Text>}
+              </View>
+            </View>
+            <AnimatedButton style={styles.primaryButton} onPress={uploadInspection} disabled={loading} loading={loading}>
+              <Text style={styles.primaryButtonText}>✅ CONFIRM & SUBMIT</Text>
+            </AnimatedButton>
+          </SafeAreaView>
+        );
+
+      case "review":
+        return (
+          <SafeAreaView style={styles.safeAreaCenter}>
+            <LinearGradient
+              colors={[COLORS.gray50, COLORS.white]}
+              style={StyleSheet.absoluteFill}
+            />
+            <TouchableOpacity onPress={goBack} style={styles.backButton}>
+              <Text style={styles.backIcon}>←</Text>
+            </TouchableOpacity>
+            <View style={styles.successAnimation}>
+              <Text style={styles.successEmoji}>✅</Text>
+            </View>
+            <Text style={styles.reviewTitle}>Inspection Saved!</Text>
+            <View style={styles.reviewCard}>
+              <Text style={styles.reviewText}>
+                👨‍✈️ Completed by <Text style={styles.reviewHighlight}>{details.inspector || currentUser?.fullName}</Text>
+              </Text>
+              {selectedProfile && (
+                <Text style={styles.reviewDetail}>
+                  {selectedProfile.name}
+                </Text>
+              )}
+            </View>
+
+            <AnimatedButton
+              style={styles.primaryButton}
+              onPress={async () => {
+                if (!inspectionId) return;
+                setLoading(true);
+                const ready = await waitForPdf(inspectionId);
+                setLoading(false);
+                if (ready) {
+                  Linking.openURL(`${API_URL}/export/${inspectionId}`);
+                } else {
+                  Alert.alert("Still Processing", "PDF is not ready yet. Try again.");
+                }
+              }}
+              disabled={loading}
+              loading={loading}
+            >
+              <Text style={styles.primaryButtonText}>📄 Export PDF</Text>
+            </AnimatedButton>
+
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => Linking.openURL(`${API_URL}/export-word/${inspectionId}`)}
+            >
+              <Text style={styles.secondaryButtonText}>📝 Export Word</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.newInspectionBtn}
+              onPress={() => {
+                setDetails({
+                  date: new Date().toISOString().split("T")[0],
+                  shipName: "",
+                  shipType: "",
+                  port: "",
+                  inspector: currentUser?.fullName || "",
+                });
+                setImages([]);
+                setShipImages([]);
+                setCompanyLogoImage(null);
+                setSelectedProfile(null);
+                setScreen("details");
+              }}
+            >
+              <Text style={styles.newInspectionText}>➕ Start New Inspection</Text>
+            </TouchableOpacity>
+          </SafeAreaView>
+        );
+
+      default:
+        return null;
     }
+  };
 
-    .login-box input{
-        width: 100%;
-        padding: 10px;
-        margin-bottom: 12px;
-        border-radius: 8px;
-        border: none;
-        outline: none;
-        font-size: 14px;
-    }
+  // ==================== ROOT RENDER ====================
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
+      {renderScreen()}
 
-    .login-box button{
-        width: 100%;
-        padding: 10px;
-        border-radius: 20px;
-        border: none;
-        background: #000;
-        color: #eee5e5;
-        font-size: 15px;
-        cursor: pointer;
-        transition: 0.3s;
-    }
+      {/* PROFILE MODAL – Enhanced with animations */}
+      <Modal
+        visible={showProfileModal}
+        animationType="none"
+        transparent
+        onRequestClose={closeProfileModal}
+        presentationStyle="overFullScreen"
+      >
+        <Animated.View style={[styles.modalOverlay, { opacity: fadeAnim }]}>
+          <TouchableWithoutFeedback onPress={closeProfileModal}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          <Animated.View style={[styles.modalContent, { transform: [{ translateY: slideAnim }] }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {isEditing ? "✏️ Edit Profile" : "👤 Inspector Profiles"}
+              </Text>
+              <TouchableOpacity onPress={closeProfileModal} style={styles.modalClose}>
+                <Text style={styles.modalCloseIcon}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {!isEditing && (
+                <TouchableOpacity
+                  style={styles.createButton}
+                  onPress={() => {
+                    setIsEditing(true);
+                    setEditingProfileId(null);
+                    setNewProfile({
+                      id: "",
+                      profilePicture: "",
+                      name: "",
+                      phone: "",
+                      email: currentUser?.email || "",
+                      signature: "",
+                      experience: "",
+                      certifications: [],
+                      shipTypes: [],
+                      licenseNumber: "",
+                      issuingAuthority: "",
+                      expiryDate: "",
+                      address: "",
+                      emergencyContact: "",
+                      notes: "",
+                      employeeId: "",
+                      baseLocation: "",
+                      specializations: [],
+                      fileUpload: "",
+                      documentUpload: "",
+                      currentRating: "",
+                      competencyHull: "",
+                      competencyMachinery: "",
+                      competencySafety: "",
+                      competencyDocs: "",
+                    });
+                  }}
+                >
+                  <Text style={styles.createButtonText}>➕ Create New Profile</Text>
+                </TouchableOpacity>
+              )}
 
-    .login-box button:hover{
-        background: #333;
-        transform: scale(1.03);
-    }
-</style>
-</head>
+              {(isEditing || newProfile.name) && (
+                <View style={styles.profileForm}>
+                  <View style={styles.previewSection}>
+                    <Text style={styles.previewSectionTitle}>🔍 Live Preview</Text>
+                    <View style={styles.previewBox}>
+                      <Text style={styles.previewItem}><Text style={styles.previewLabel}>Name:</Text> {newProfile.name || '—'}</Text>
+                      <Text style={styles.previewItem}><Text style={styles.previewLabel}>Office Location:</Text> {newProfile.baseLocation || '—'}</Text>
+                      <Text style={styles.previewItem}><Text style={styles.previewLabel}>Specializations:</Text> {newProfile.specializations.join(', ') || '—'}</Text>
+                      <Text style={styles.previewItem}><Text style={styles.previewLabel}>Experience:</Text> {newProfile.experience || '—'}</Text>
+                      <Text style={styles.previewItem}><Text style={styles.previewLabel}>Current Rating:</Text> {newProfile.currentRating || '—'}</Text>
+                      <Text style={styles.previewItem}><Text style={styles.previewLabel}>Competency Matrix:</Text></Text>
+                      <View style={styles.competencyMatrix}>
+                        <Text style={styles.matrixItem}>• Hull & Structure: {newProfile.competencyHull || '—'}</Text>
+                        <Text style={styles.matrixItem}>• Machinery: {newProfile.competencyMachinery || '—'}</Text>
+                        <Text style={styles.matrixItem}>• Safety Systems: {newProfile.competencySafety || '—'}</Text>
+                        <Text style={styles.matrixItem}>• Documentation: {newProfile.competencyDocs || '—'}</Text>
+                      </View>
+                    </View>
+                  </View>
 
-<body>
+                  <TouchableOpacity style={styles.avatarPicker} onPress={pickProfilePicture}>
+                    {newProfile.profilePicture ? (
+                      <Image source={{ uri: newProfile.profilePicture }} style={styles.avatarLarge} />
+                    ) : (
+                      <View style={styles.avatarPlaceholder}>
+                        <Text style={styles.avatarIcon}>📸</Text>
+                        <Text style={styles.avatarHint}>Add photo</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
 
-<div class="login-box">
-    <h3>PHANTOM LOGIN</h3>
+                  <Text style={styles.sectionTitle}>📋 Basic Details</Text>
+                  <View style={[styles.inputGroup, focusedInput === 'name' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>👤</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Full Name *"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.name}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, name: t })}
+                      onFocus={() => setFocusedInput('name')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  <View style={[styles.inputGroup, focusedInput === 'employeeId' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>🆔</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Employee ID"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.employeeId}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, employeeId: t })}
+                      onFocus={() => setFocusedInput('employeeId')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  <View style={[styles.inputGroup, focusedInput === 'email' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>📧</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Email"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.email}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, email: t })}
+                      keyboardType="email-address"
+                      onFocus={() => setFocusedInput('email')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  <View style={[styles.inputGroup, focusedInput === 'phone' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>📱</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Phone"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.phone}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, phone: t })}
+                      keyboardType="phone-pad"
+                      onFocus={() => setFocusedInput('phone')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  <View style={[styles.inputGroup, focusedInput === 'baseLocation' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>📍</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Base Location"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.baseLocation}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, baseLocation: t })}
+                      onFocus={() => setFocusedInput('baseLocation')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
 
-    <form>
-        <input type="text" placeholder="Enter Username" required>
-        <input type="email" placeholder="Enter Email" required>
-        <input type="password" placeholder="Enter Password" required>
-        <input type="password" placeholder="Confirm Password" required>
-        <button type="submit">Submit</button>
-    </form>
-</div>
+                  <Text style={styles.sectionTitle}>🔧 Specializations</Text>
+                  <View style={styles.chipWrap}>
+                    {SPECIALIZATIONS.map((spec) => (
+                      <TouchableOpacity
+                        key={spec}
+                        style={[styles.chip, newProfile.specializations.includes(spec) && styles.chipSelected]}
+                        onPress={() => toggleSpecialization(spec)}
+                      >
+                        <Text style={[styles.chipText, newProfile.specializations.includes(spec) && styles.chipTextSelected]}>
+                          {spec}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
-</body>
-</html>
+                  <Text style={styles.sectionTitle}>📎 File Uploads</Text>
+                  <TouchableOpacity style={styles.uploadBtn} onPress={pickFileUpload}>
+                    <Text style={styles.uploadBtnText}>📁 Upload File</Text>
+                  </TouchableOpacity>
+                  {newProfile.fileUpload ? (
+                    <View style={styles.uploadPreview}>
+                      <Image source={{ uri: newProfile.fileUpload }} style={styles.uploadThumbSmall} />
+                      <TouchableOpacity onPress={() => setNewProfile({ ...newProfile, fileUpload: '' })}>
+                        <Text style={styles.removeIconSmall}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+
+                  <TouchableOpacity style={styles.uploadBtn} onPress={pickDocumentUpload}>
+                    <Text style={styles.uploadBtnText}>📄 Upload Document</Text>
+                  </TouchableOpacity>
+                  {newProfile.documentUpload ? (
+                    <View style={styles.uploadPreview}>
+                      <Image source={{ uri: newProfile.documentUpload }} style={styles.uploadThumbSmall} />
+                      <TouchableOpacity onPress={() => setNewProfile({ ...newProfile, documentUpload: '' })}>
+                        <Text style={styles.removeIconSmall}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+
+                  <Text style={styles.sectionTitle}>⭐ Competency Matrix</Text>
+                  <View style={[styles.inputGroup, focusedInput === 'currentRating' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>⭐</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Current Rating"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.currentRating}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, currentRating: t })}
+                      onFocus={() => setFocusedInput('currentRating')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  <View style={[styles.inputGroup, focusedInput === 'competencyHull' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>🏗️</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Hull & Structure"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.competencyHull}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, competencyHull: t })}
+                      onFocus={() => setFocusedInput('competencyHull')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  <View style={[styles.inputGroup, focusedInput === 'competencyMachinery' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>⚙️</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Machinery"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.competencyMachinery}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, competencyMachinery: t })}
+                      onFocus={() => setFocusedInput('competencyMachinery')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  <View style={[styles.inputGroup, focusedInput === 'competencySafety' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>🛡️</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Safety Systems"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.competencySafety}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, competencySafety: t })}
+                      onFocus={() => setFocusedInput('competencySafety')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  <View style={[styles.inputGroup, focusedInput === 'competencyDocs' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>📄</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Documentation"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.competencyDocs}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, competencyDocs: t })}
+                      onFocus={() => setFocusedInput('competencyDocs')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+
+                  <Text style={styles.sectionTitle}>🎓 Professional (existing)</Text>
+                  <View style={[styles.inputGroup, focusedInput === 'experience' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>⏳</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Experience"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.experience}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, experience: t })}
+                      onFocus={() => setFocusedInput('experience')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  <View style={[styles.inputGroup, focusedInput === 'licenseNumber' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>🪪</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="License Number"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.licenseNumber}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, licenseNumber: t })}
+                      onFocus={() => setFocusedInput('licenseNumber')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+                  <View style={[styles.inputGroup, focusedInput === 'issuingAuthority' && styles.inputFocused]}>
+                    <Text style={styles.inputIcon}>🏛️</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Issuing Authority"
+                      placeholderTextColor={COLORS.gray400}
+                      value={newProfile.issuingAuthority}
+                      onChangeText={(t) => setNewProfile({ ...newProfile, issuingAuthority: t })}
+                      onFocus={() => setFocusedInput('issuingAuthority')}
+                      onBlur={() => setFocusedInput(null)}
+                    />
+                  </View>
+
+                  <Text style={styles.sectionTitle}>📜 Certifications (existing)</Text>
+                  <View style={styles.chipWrap}>
+                    {CERTIFICATIONS.map((cert) => (
+                      <TouchableOpacity
+                        key={cert}
+                        style={[styles.chip, newProfile.certifications.includes(cert) && styles.chipSelected]}
+                        onPress={() => toggleCertification(cert)}
+                      >
+                        <Text style={[styles.chipText, newProfile.certifications.includes(cert) && styles.chipTextSelected]}>
+                          {cert}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.sectionTitle}>⛴️ Ship Types (existing)</Text>
+                  <View style={styles.chipWrap}>
+                    {SHIP_TYPES.map((type) => (
+                      <TouchableOpacity
+                        key={type}
+                        style={[styles.chip, newProfile.shipTypes.includes(type) && styles.chipSelected]}
+                        onPress={() => toggleShipType(type)}
+                      >
+                        <Text style={[styles.chipText, newProfile.shipTypes.includes(type) && styles.chipTextSelected]}>
+                          {type}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.sectionTitle}>✍️ Signature (existing)</Text>
+                  <TouchableOpacity style={styles.signatureBtn} onPress={pickSignature}>
+                    <Text style={styles.signatureBtnText}>
+                      {newProfile.signature ? "🖼️ Change Signature" : "✍️ Upload Signature"}
+                    </Text>
+                  </TouchableOpacity>
+                  {newProfile.signature && (
+                    <Image source={{ uri: newProfile.signature }} style={styles.signaturePreview} />
+                  )}
+
+                  <AnimatedButton style={styles.saveBtn} onPress={saveProfile} disabled={loading} loading={loading}>
+                    <Text style={styles.saveBtnText}>
+                      {isEditing ? "✅ UPDATE PROFILE" : "💾 SAVE PROFILE"}
+                    </Text>
+                  </AnimatedButton>
+                </View>
+              )}
+
+              {!isEditing && profiles.length > 0 && (
+                <>
+                  <Text style={styles.savedTitle}>👥 Saved Profiles</Text>
+                  {profiles.map((profile) => (
+                    <View key={profile.id} style={styles.profileCard}>
+                      <View style={styles.profileHeader}>
+                        <View style={styles.profileInfo}>
+                          {profile.profilePicture ? (
+                            <Image source={{ uri: profile.profilePicture }} style={styles.profileAvatar} />
+                          ) : (
+                            <View style={styles.profileAvatarPlaceholder}>
+                              <Text style={styles.profileAvatarText}>{profile.name.charAt(0)}</Text>
+                            </View>
+                          )}
+                          <View>
+                            <Text style={styles.profileName}>{profile.name}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.profileActions}>
+                          <TouchableOpacity
+                            style={[styles.actionBtn, styles.editBtn]}
+                            onPress={() => openEditProfileModal(profile)}
+                          >
+                            <Text style={styles.actionText}>✏️ Edit</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.actionBtn, styles.deleteBtn]}
+                            onPress={() => deleteProfile(profile.id)}
+                          >
+                            <Text style={styles.actionText}>🗑️ Del</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                      <View style={styles.useRow}>
+                        <TouchableOpacity
+                          style={styles.useBtn}
+                          onPress={() => {
+                            selectProfile(profile);
+                            closeProfileModal();
+                          }}
+                        >
+                          <Text style={styles.useBtnText}>✅ Use This Profile</Text>
+                        </TouchableOpacity>
+                        {selectedProfile?.id === profile.id && (
+                          <Text style={styles.selectedBadge}>✓ Selected</Text>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </>
+              )}
+              <View style={styles.modalSpacer} />
+            </ScrollView>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+    </View>
+  );
+}
+
+// ==================== STYLES (Luxury Edition) ====================
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: COLORS.gray50,
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.gray50,
+  },
+  safeAreaCenter: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    backgroundColor: COLORS.gray50,
+  },
+  centerScroll: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 40,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 100,
+  },
+
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 5,
+  },
+  formCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 5,
+  },
+  imageCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 5,
+  },
+
+  brand: {
+    fontSize: 38,
+    fontFamily: FONTS.heavy,
+    color: COLORS.primary,
+    textAlign: "center",
+    marginBottom: 6,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 18,
+    fontFamily: FONTS.medium,
+    color: COLORS.gray500,
+    textAlign: "center",
+    marginBottom: 40,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontFamily: FONTS.semibold,
+    color: COLORS.gray800,
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: FONTS.semibold,
+    color: COLORS.primary,
+    marginTop: 28,
+    marginBottom: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray200,
+  },
+
+  inputGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    marginBottom: 14,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    height: 60,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  inputFocused: {
+    borderColor: COLORS.primary,
+    borderWidth: 1.5,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  inputIcon: {
+    fontSize: 20,
+    marginRight: 14,
+    color: COLORS.gray500,
+    fontFamily: FONTS.medium,
+  },
+  inputField: {
+    flex: 1,
+    fontSize: 18,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray900,
+    paddingVertical: 0,
+  },
+  inputError: {
+    borderColor: COLORS.error,
+    borderWidth: 1.5,
+  },
+  errorText: {
+    color: COLORS.error,
+    fontSize: 13,
+    fontFamily: FONTS.medium,
+    marginTop: -10,
+    marginBottom: 14,
+    marginLeft: 18,
+  },
+  passwordGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    marginBottom: 14,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    height: 60,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  passwordToggle: {
+    position: "absolute",
+    right: 18,
+    top: 16,
+  },
+  toggleIcon: {
+    fontSize: 20,
+    color: COLORS.gray500,
+  },
+
+  primaryButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 20,
+    borderRadius: 30,
+    alignItems: "center",
+    marginTop: 20,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  primaryButtonText: {
+    color: COLORS.white,
+    fontSize: 18,
+    fontFamily: FONTS.semibold,
+    letterSpacing: 1,
+  },
+  secondaryButton: {
+    backgroundColor: COLORS.white,
+    paddingVertical: 16,
+    borderRadius: 30,
+    alignItems: "center",
+    marginTop: 12,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  secondaryButtonText: {
+    color: COLORS.primary,
+    fontSize: 15,
+    fontFamily: FONTS.semibold,
+  },
+  nextButton: {
+    backgroundColor: COLORS.success,
+    paddingVertical: 18,
+    borderRadius: 30,
+    alignItems: "center",
+    marginTop: 12,
+    marginBottom: 24,
+    shadowColor: COLORS.success,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  nextButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontFamily: FONTS.semibold,
+    letterSpacing: 0.8,
+  },
+  addButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  addIcon: {
+    fontSize: 22,
+    color: COLORS.white,
+    marginRight: 10,
+  },
+  addText: {
+    fontSize: 15,
+    fontFamily: FONTS.semibold,
+    color: COLORS.white,
+  },
+  selectButton: {
+    backgroundColor: COLORS.secondary,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 16,
+    justifyContent: "center",
+    height: 56,
+    shadowColor: COLORS.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  selectButtonText: {
+    color: COLORS.white,
+    fontFamily: FONTS.semibold,
+    fontSize: 14,
+  },
+  cameraBtn: {
+    flex: 1,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: "center",
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cameraIcon: {
+    fontSize: 28,
+    color: COLORS.white,
+    marginBottom: 4,
+  },
+  cameraLabel: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontFamily: FONTS.semibold,
+  },
+  galleryBtn: {
+    flex: 1,
+    backgroundColor: COLORS.secondary,
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: "center",
+    shadowColor: COLORS.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  galleryIcon: {
+    fontSize: 28,
+    color: COLORS.white,
+    marginBottom: 4,
+  },
+  galleryLabel: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontFamily: FONTS.semibold,
+  },
+  signatureBtn: {
+    backgroundColor: COLORS.secondary,
+    padding: 16,
+    borderRadius: 16,
+    alignItems: "center",
+    marginBottom: 16,
+    shadowColor: COLORS.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  signatureBtnText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontFamily: FONTS.semibold,
+  },
+  saveBtn: {
+    backgroundColor: COLORS.primary,
+    padding: 18,
+    borderRadius: 30,
+    alignItems: "center",
+    marginVertical: 24,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  saveBtnText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontFamily: FONTS.semibold,
+  },
+  createButton: {
+    backgroundColor: COLORS.primary,
+    padding: 18,
+    borderRadius: 30,
+    alignItems: "center",
+    marginBottom: 24,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  createButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontFamily: FONTS.semibold,
+  },
+  useBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 30,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  useBtnText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontFamily: FONTS.semibold,
+  },
+  newInspectionBtn: {
+    backgroundColor: COLORS.white,
+    paddingVertical: 18,
+    borderRadius: 30,
+    alignItems: "center",
+    marginTop: 20,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    width: "100%",
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  newInspectionText: {
+    color: COLORS.primary,
+    fontSize: 16,
+    fontFamily: FONTS.semibold,
+  },
+  actionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  editBtn: {
+    backgroundColor: COLORS.secondary,
+    borderColor: COLORS.secondary,
+  },
+  deleteBtn: {
+    backgroundColor: COLORS.error,
+    borderColor: COLORS.error,
+  },
+  actionText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontFamily: FONTS.semibold,
+  },
+
+  detailsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 0,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 4,
+    marginBottom: 8,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  logoBox: {
+    marginRight: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  logoWrapper: {
+    position: 'relative',
+    width: 60,
+    height: 60,
+  },
+  headerLogo: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  logoRemove: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  removeIconSmall: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontFamily: FONTS.bold,
+  },
+  logoPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    backgroundColor: COLORS.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderStyle: 'dashed',
+  },
+  placeholderIcon: {
+    fontSize: 26,
+    color: COLORS.secondary,
+  },
+  placeholderText: {
+    fontSize: 9,
+    fontFamily: FONTS.medium,
+    color: COLORS.gray500,
+    marginTop: 2,
+  },
+  headerText: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  companyName: {
+    fontSize: 20,
+    fontFamily: FONTS.bold,
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  poweredBy: {
+    fontSize: 13,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray500,
+  },
+  dateBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    minWidth: 150,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  dateIcon: {
+    fontSize: 20,
+    marginRight: 10,
+    color: COLORS.primary,
+  },
+  dateText: {
+    fontSize: 16,
+    fontFamily: FONTS.medium,
+    color: COLORS.gray900,
+    flex: 1,
+  },
+
+  inspectorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  profileBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.gray100,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 40,
+    marginTop: 10,
+  },
+  badgeText: {
+    fontSize: 14,
+    fontFamily: FONTS.medium,
+    color: COLORS.secondary,
+  },
+  badgeRemove: {
+    fontSize: 15,
+    fontFamily: FONTS.bold,
+    color: COLORS.gray500,
+  },
+
+  imageGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  imageItem: {
+    width: "48%",
+    marginHorizontal: "1%",
+    marginBottom: 18,
+    position: "relative",
+  },
+  thumbImage: {
+    width: "100%",
+    height: 140,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  removeButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.error,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  removeIcon: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontFamily: FONTS.bold,
+  },
+
+  // Floating Bottom Navigation
+  floatingNav: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    flexDirection: "row",
+    backgroundColor: COLORS.white,
+    borderRadius: 40,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 30,
+    elevation: 15,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    zIndex: 10,
+  },
+  navItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    borderRadius: 30,
+  },
+  navActive: {
+    backgroundColor: COLORS.primary,
+  },
+  navIcon: {
+    fontSize: 22,
+    marginBottom: 2,
+    color: COLORS.gray500,
+  },
+  navIconActive: {
+    color: COLORS.white,
+  },
+  navLabel: {
+    fontSize: 11,
+    fontFamily: FONTS.medium,
+    color: COLORS.gray500,
+  },
+  navLabelActive: {
+    color: COLORS.white,
+    fontFamily: FONTS.semibold,
+  },
+  navDivider: {
+    width: 1,
+    height: "70%",
+    backgroundColor: COLORS.gray200,
+    alignSelf: "center",
+  },
+
+  uploadHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 14,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray200,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  backCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.gray100,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  backIcon: {
+    fontSize: 22,
+    fontFamily: FONTS.bold,
+    color: COLORS.primary,
+  },
+  uploadTitle: {
+    fontSize: 18,
+    fontFamily: FONTS.semibold,
+    color: COLORS.gray900,
+  },
+  uploadContent: {
+    padding: 20,
+    paddingBottom: 110,
+  },
+  pickerWrap: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    marginBottom: 24,
+    overflow: "hidden",
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  picker: {
+    height: 52,
+    color: COLORS.gray900,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 14,
+  },
+  pageRow: {
+    flexDirection: "row",
+    marginBottom: 20,
+    gap: 14,
+  },
+  pageCol: {
+    flex: 1,
+  },
+  imageCardUpload: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  uploadThumb: {
+    width: "100%",
+    height: 160,
+    borderRadius: 12,
+  },
+  uploadRemove: {
+    position: "absolute",
+    top: 18,
+    right: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.error,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  uploadRemoveIcon: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+  },
+  uploadDesc: {
+    backgroundColor: COLORS.white,
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 14,
+    fontSize: 13,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray800,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+
+  previewCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 28,
+    padding: 28,
+    marginBottom: 28,
+    width: "100%",
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 28,
+    elevation: 8,
+  },
+  previewShip: {
+    fontSize: 18,
+    fontFamily: FONTS.semibold,
+    color: COLORS.gray900,
+    marginBottom: 8,
+  },
+  previewPort: {
+    fontSize: 16,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray700,
+    marginBottom: 8,
+  },
+  previewInspector: {
+    fontSize: 16,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray700,
+    marginBottom: 8,
+  },
+  previewHighlight: {
+    fontFamily: FONTS.bold,
+    color: COLORS.primary,
+  },
+  previewProfile: {
+    fontSize: 15,
+    fontFamily: FONTS.medium,
+    color: COLORS.gray500,
+    marginBottom: 16,
+    fontStyle: "italic",
+  },
+  previewStats: {
+    flexDirection: "row",
+    gap: 20,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray200,
+  },
+  previewStat: {
+    fontSize: 14,
+    fontFamily: FONTS.semibold,
+    color: COLORS.secondary,
+  },
+  previewTitle: {
+    fontSize: 26,
+    fontFamily: FONTS.bold,
+    color: COLORS.gray900,
+    marginBottom: 24,
+  },
+  reviewCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 28,
+    padding: 28,
+    marginBottom: 28,
+    width: "100%",
+    alignItems: "center",
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 28,
+    elevation: 8,
+  },
+  reviewText: {
+    fontSize: 18,
+    fontFamily: FONTS.medium,
+    color: COLORS.gray800,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  reviewHighlight: {
+    fontFamily: FONTS.bold,
+    color: COLORS.primary,
+  },
+  reviewDetail: {
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray500,
+  },
+  reviewTitle: {
+    fontSize: 26,
+    fontFamily: FONTS.bold,
+    color: COLORS.gray900,
+    marginBottom: 12,
+  },
+  successAnimation: {
+    marginBottom: 20,
+  },
+  successEmoji: {
+    fontSize: 80,
+  },
+
+  logoLarge: {
+    width: 140,
+    height: 140,
+    alignSelf: "center",
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  logoSmall: {
+    width: 100,
+    height: 100,
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  registerTitle: {
+    fontSize: 26,
+    fontFamily: FONTS.bold,
+    color: COLORS.primary,
+    textAlign: "center",
+    marginBottom: 6,
+  },
+  registerSubtitle: {
+    fontSize: 15,
+    fontFamily: FONTS.medium,
+    color: COLORS.gray500,
+    textAlign: "center",
+    marginBottom: 28,
+  },
+  welcomeCard: {
+    backgroundColor: COLORS.success,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 24,
+    shadowColor: COLORS.success,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  welcomeText: {
+    color: COLORS.white,
+    fontFamily: FONTS.semibold,
+    fontSize: 15,
+    textAlign: "center",
+  },
+  footerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 24,
+  },
+  footerText: {
+    color: COLORS.gray500,
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+  },
+  footerLink: {
+    color: COLORS.primary,
+    fontSize: 15,
+    fontFamily: FONTS.semibold,
+  },
+
+  backButton: {
+    position: "absolute",
+    top: 20,
+    left: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.white,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    zIndex: 1000,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: COLORS.overlay,
+    justifyContent: "flex-end",
+    elevation: 999,
+    zIndex: 999,
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    maxHeight: "90%",
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 28,
+    elevation: 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 22,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray200,
+    backgroundColor: COLORS.gray50,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: FONTS.bold,
+    color: COLORS.primary,
+  },
+  modalClose: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.gray200,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalCloseIcon: {
+    fontSize: 18,
+    fontFamily: FONTS.bold,
+    color: COLORS.gray700,
+  },
+  modalBody: {
+    padding: 24,
+  },
+  modalSpacer: {
+    height: 40,
+  },
+  profileForm: {
+    marginBottom: 24,
+  },
+  avatarPicker: {
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  avatarLarge: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    borderColor: COLORS.primary,
+  },
+  avatarPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: COLORS.gray100,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: COLORS.gray200,
+    borderStyle: "dashed",
+  },
+  avatarIcon: {
+    fontSize: 38,
+    color: COLORS.secondary,
+  },
+  avatarHint: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.gray500,
+    marginTop: 6,
+  },
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 10,
+    gap: 10,
+  },
+  chip: {
+    backgroundColor: COLORS.gray100,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  chipSelected: {
+    backgroundColor: COLORS.secondary,
+    borderColor: COLORS.secondary,
+  },
+  chipText: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.gray700,
+  },
+  chipTextSelected: {
+    color: COLORS.white,
+  },
+  signaturePreview: {
+    width: 200,
+    height: 80,
+    alignSelf: "center",
+    marginBottom: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  savedTitle: {
+    fontSize: 18,
+    fontFamily: FONTS.bold,
+    color: COLORS.primary,
+    marginBottom: 20,
+    marginTop: 12,
+  },
+  profileCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    shadowColor: COLORS.gray900,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  profileHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  profileInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  profileAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  profileAvatarPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+  },
+  profileAvatarText: {
+    color: COLORS.white,
+    fontSize: 20,
+    fontFamily: FONTS.bold,
+  },
+  profileName: {
+    fontSize: 16,
+    fontFamily: FONTS.semibold,
+    color: COLORS.gray900,
+  },
+  profileActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  useRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  selectedBadge: {
+    fontSize: 13,
+    fontFamily: FONTS.semibold,
+    color: COLORS.success,
+  },
+
+  previewSection: {
+    backgroundColor: COLORS.gray50,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  previewSectionTitle: {
+    fontSize: 18,
+    fontFamily: FONTS.bold,
+    color: COLORS.primary,
+    marginBottom: 14,
+  },
+  previewBox: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 16,
+  },
+  previewItem: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray800,
+    marginBottom: 6,
+  },
+  previewLabel: {
+    fontFamily: FONTS.bold,
+    color: COLORS.gray700,
+  },
+  competencyMatrix: {
+    marginLeft: 10,
+    marginTop: 6,
+  },
+  matrixItem: {
+    fontSize: 13,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray600,
+    marginBottom: 4,
+  },
+  uploadBtn: {
+    backgroundColor: COLORS.secondary,
+    padding: 16,
+    borderRadius: 16,
+    alignItems: "center",
+    marginBottom: 14,
+    shadowColor: COLORS.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  uploadBtnText: {
+    color: COLORS.white,
+    fontSize: 15,
+    fontFamily: FONTS.semibold,
+  },
+  uploadPreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.gray100,
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 14,
+  },
+  uploadThumbSmall: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+
+  bottomSpacer: {
+    height: 100,
+  },
+});
